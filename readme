@@ -1,0 +1,68 @@
+# Projet Logement - Agent IA Auto-Finder & RLHF
+
+## 1. Description du Projet
+Ce projet consiste à développer un système automatisé (Agent IA) de recherche et de sélection immobilière. Le système doit scraper des annonces (initialement sur Leboncoin), normaliser les données, et apprendre les préférences implicites et explicites de l'utilisateur grâce à un algorithme d'Apprentissage par Renforcement basé sur les retours humains (RLHF - Reinforcement Learning from Human Feedback). 
+
+Le but ultime est de fournir un Top 20 des meilleurs appartements en toute autonomie, une fois que l'IA a atteint un seuil de confiance suffisant quant aux goûts de l'utilisateur.
+
+## 2. Critères d'Analyse et d'Extraction (Spécifications des Données)
+Chaque annonce scrapée doit impérativement être convertie en un objet JSON standardisé. L'IA de scraping et de traitement NLP (Natural Language Processing) devra extraire, déduire ou calculer les critères suivants à partir des métadonnées et de la description textuelle de l'annonce :
+
+### 2.1. Critères Géographiques & Locaux
+- **Distance UTC** (`float`) : Distance (en km ou temps de trajet) par rapport à l'UTC de Compiègne. Nécessite un géocodage de l'adresse/quartier.
+- **Étage** (`int` / `null`) : Numéro de l'étage. Priorité à identifier s'il s'agit au moins du 2ème étage dans le cas d'un immeuble.
+- **Vue** (`string` / `null`) : Identification de l'orientation visuelle (ex: "vue sur rue", "vue sur cour", "vis-à-vis").
+
+### 2.2. Critères Financiers & Dimensionnels
+- **Prix Total** (`float`) : Le loyer total **DOIT TOUJOURS INCLURE LES CHARGES**. Si le loyer hors charges (HC) et les charges sont séparés, ils doivent être additionnés.
+- **Surface** (`float`) : La surface habitable en mètres carrés (m²).
+- **Nombre de salles d'eau** (`int`) : Nombre de salles de bain ou salles d'eau disponibles.
+
+### 2.3. Équipements & Prestations (Extraits via NLP/Regex)
+- **Meublé** (`boolean`) : Le logement est-il loué meublé ?
+- **Machine à laver** (`boolean`) : Présence d'un lave-linge.
+- **Lave-vaisselle** (`boolean`) : Présence d'un lave-vaisselle.
+- **Sèche-linge** (`boolean`) : Présence d'un sèche-linge.
+
+### 2.4. Détail des Charges
+- **Détail des charges incluses** (`dictionnaire de booleans`) : Le système doit analyser le texte pour déterminer ce qui est compris dans les charges locatives :
+  - `eau_froide` (bool)
+  - `eau_chaude` (bool)
+  - `electricite` (bool)
+  - `chauffage` (bool)
+  - `internet` (bool)
+  - `ordures_menageres` (bool)
+
+## 3. Workflow et Fonctionnalités du Système
+
+### Phase 1 : Collecte (Scraping) & Standardisation
+1. Contournement des protections anti-bots (ex: Datadome sur Leboncoin) via des outils de navigation automatisée (Playwright/Selenium).
+2. Extraction du DOM des informations brutes.
+3. Nettoyage et enrichissement (Calcul des distances API, NLP sur la description pour extraire les équipements et le détail des charges).
+4. Sauvegarde dans une base de données locale unifiée (SQLite ou JSON Lines).
+
+### Phase 2 : Apprentissage Utilisateur (RLHF)
+1. L'Agent IA sélectionne 2 annonces pertinentes et les affiche sous forme de "duel" (A vs B).
+2. L'utilisateur vote pour son appartement préféré.
+3. L'Agent met à jour les "poids" de son modèle d'évaluation (scoring) en comprenant *pourquoi* A a été préféré à B (ex: l'utilisateur a préféré payer plus cher pour avoir un lave-vaisselle et être plus près de l'UTC).
+
+### Phase 3 : Mode Autonome (Top 20)
+1. L'Agent calcule sa "confiance de prédiction" en fonction de la cohérence des votes de l'utilisateur.
+2. Lorsque la confiance est suffisante, la phase de duel s'arrête.
+3. L'Agent score l'intégralité de la base de données et actualise en permanence un "Top 20" des meilleurs logements.
+
+## 4. Architecture du Code (Dossier `logement`)
+*Note de conception : L'architecture actuelle concentre tout dans un dossier `logement`. Le code doit être hautement modulaire (fonctions indépendantes). Si la disposition des dossiers venait à changer à l'avenir, cela ne doit en aucun cas casser la logique métier ou l'import des modules.*
+
+- `main.py` : Orchestrateur global (gestion des phases 1, 2 et 3).
+- `scraper_leboncoin.py` : Gestion spécifique de Leboncoin (navigateur furtif, pagination).
+- `traitement_donnees.py` : Algorithmes NLP et Regex pour extraire les critères complexes (équipements, vue sur rue, étage, séparation des charges).
+- `geolocalisation.py` : Module de calcul de la distance à l'UTC Compiègne.
+- `agent_ia.py` : Algorithme de Reinforcement Learning, scoring des annonces et calcul de la confiance.
+- `interface.py` : Interface utilisateur (affichage console du duel A/B et du Top 20).
+- `base_donnees.py` : Gestion des requêtes CRUD pour stocker les annonces et l'historique des votes (SQLite recommandé).
+
+## 5. Directives Strictes pour l'IA Développeuse
+- **Résilience du Scraper** : Le scraping doit inclure des `try/except` robustes et des délais aléatoires (human-like behavior). Si une donnée n'est pas trouvée, la valeur `null` ou `False` doit être attribuée sans faire crasher le script.
+- **NLP Basique mais Efficace** : Pour l'extraction des charges et équipements, privilégier dans un premier temps des dictionnaires de mots-clés et des expressions régulières avancées (Regex) insensibles à la casse et aux accents, appliquées sur le champ "description".
+- **Typage** : Utiliser le typage strict (`Type Hints` en Python) pour toutes les fonctions afin de garantir l'intégrité du pipeline de données entre le scraper et l'agent IA.
