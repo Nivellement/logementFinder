@@ -27,6 +27,16 @@ def init_db() -> None:
     conn.commit()
     conn.close()
 
+def annonce_existe(annonce_id: str) -> bool:
+    """Vérifie si une annonce est déjà présente en base de données."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM annonces WHERE id = ?", (annonce_id,))
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
+
 def sauvegarder_annonce(annonce: Dict[str, Any]) -> None:
     """Enregistre ou met à jour un objet annonce normalisé dans SQLite."""
     init_db()
